@@ -1,0 +1,26 @@
+/* Custom printing CSS */
+@media print {
+
+	/* Forces Electron (Chromium-based browser) to render background images (eg: external link icon) when printing */
+	* {
+		-webkit-print-color-adjust: exact !important;
+		-moz-print-color-adjust: exact;
+		-ms-print-color-adjust: exact;
+		print-color-adjust: exact;
+	}
+
+	/* Hides the metadata-container div (contains properties) */
+	.metadata-container {
+		display: none;
+	}
+
+	/* Stops the page content appearing squashed onto the right half of the page */
+	.markdown-preview-section {
+		margin: auto !important;
+		max-width: none !important;
+	}
+}
+
+.inline-title {
+	font-size: 1.802em;
+}

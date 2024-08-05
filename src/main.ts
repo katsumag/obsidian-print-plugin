@@ -1,7 +1,16 @@
-import {App, FileSystemAdapter, Plugin} from "obsidian";
+import {App, Editor, FileSystemAdapter, MarkdownFileInfo, MarkdownView, Plugin} from "obsidian";
 import {ObsidianPrintPluginSettingTab} from "./settingsTab";
 import {DEFAULT_SETTINGS, ObsidianPrintPluginSettings} from "./settings";
 import printJS from "print-js";
+import * as stream from "node:stream";
+import * as fs from "node:fs";
+import {base} from "w3c-keyname";
+
+
+// MarkdownViews have an undocumented printToPdf function, declare it here, so we can use it
+interface PrintableMarkdownView extends MarkdownView {
+	printToPdf: Function
+}
 
 export default class ObsidianPrintPlugin extends Plugin {
 
@@ -15,25 +24,15 @@ export default class ObsidianPrintPlugin extends Plugin {
 		this.addCommand({
 			id: 'print',
 			name: 'print',
-			callback: () => {
-				// Set to light theme for printing
-				document.body.removeClass("theme-dark")
-				document.body.addClass("theme-light")
+			editorCallback: (editor: Editor, view: MarkdownView) => {
+				// Listen to the PDF export completion message
+				this.registerDomEvent(window, "afterprint", (evt: Event) => {
+					this.printSavedPDF()
+				}, {
+					once: true
+				});
 
-				document.getElementsByClassName("cm-content")[0].id = "print-content";
-
-				printJS({
-					printable: 'print-content',
-					type: 'html',
-					//css: ["app://obsidian.md/app.css"],
-					//style: document.getElementsByTagName("head")[0].getElementsByTagName("style")[1].innerHTML,
-					scanStyles: true,
-					targetStyles: ['*'],
-					documentTitle: this.app.workspace.getActiveFile()?.name
-				})
-
-				document.body.addClass("theme-dark")
-
+				(view as PrintableMarkdownView).printToPdf()
 			}
 		})
 	}
@@ -50,12 +49,34 @@ export default class ObsidianPrintPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
-	getVaultAbsolutePath(app: App) {
-		let adapter = app.vault.adapter;
-		if (adapter instanceof FileSystemAdapter) {
-			return adapter.getBasePath();
+	printSavedPDF() {
+
+		let notices = document.getElementsByClassName("notice-container")[0].getElementsByClassName("notice")
+		let noticeString = Array.from(notices).map(notice => notice.textContent).filter(text => {
+			if (! text) { return false }
+			return text.startsWith("PDF Saved to ")
+		}).first()
+
+		if (! noticeString) {
+			console.error("Could not capture PDF saved notice")
+			return
 		}
-		return null;
+
+		let pdfPath = noticeString.substring(13)
+		let base64EncodedPDF = fs.readFileSync(pdfPath).toString("base64")
+
+		printJS({
+			printable: base64EncodedPDF,
+			type: 'pdf',
+			base64: true,
+			showModal: true
+		})
+
+		this.registerDomEvent(window, "afterprint", (evt: Event) => {
+			fs.unlinkSync(pdfPath)
+		}, {
+			once: true
+		})
 	}
 
 }
