@@ -51,32 +51,56 @@ export default class ObsidianPrintPlugin extends Plugin {
 
 	printSavedPDF() {
 
-		let notices = document.getElementsByClassName("notice-container")[0].getElementsByClassName("notice")
-		let noticeString = Array.from(notices).map(notice => notice.textContent).filter(text => {
-			if (! text) { return false }
-			return text.startsWith("PDF Saved to ")
-		}).first()
+		let startTime = Date.now()
 
-		if (! noticeString) {
-			console.error("Could not capture PDF saved notice")
-			return
-		}
+		new Promise((resolve) => {
+			const intervalId = setInterval(() => {
+				if (Date.now() - startTime >= 200) {
+					clearInterval(intervalId)
+					resolve(null)
+				}
 
-		let pdfPath = noticeString.substring(13)
-		let base64EncodedPDF = fs.readFileSync(pdfPath).toString("base64")
+				if (!document.querySelector(".notice-container .notice")) { return }
 
-		printJS({
-			printable: base64EncodedPDF,
-			type: 'pdf',
-			base64: true,
-			showModal: true
-		})
+				let notices = document.getElementsByClassName("notice-container")[0].getElementsByClassName("notice")
+				let noticeString = Array.from(notices).map(notice => notice.textContent).filter(text => {
+					if (!text) { return false }
+					return text.startsWith("PDF Saved to ")
+				}).first()
 
-		this.registerDomEvent(window, "afterprint", (evt: Event) => {
-			fs.unlinkSync(pdfPath)
-		}, {
-			once: true
-		})
+				if (!noticeString) { return }
+
+				clearInterval(intervalId)
+				resolve(noticeString)
+			}, 100);
+		}).then((pdfPathString: String | null) => {
+			if (! pdfPathString) {
+				console.error("Could not capture PDF saved notice")
+				return
+			}
+
+			console.log(pdfPathString)
+
+			let pdfPath = pdfPathString.substring(13)
+			// let base64EncodedPDF = fs.readFileSync(pdfPath).toString("base64")
+			let base64EncodedPDF = fs.readFileSync(pdfPath)
+			let printablePDF = new Blob([base64EncodedPDF], { type: "application/pdf" })
+			//console.log(base64EncodedPDF)
+
+			printJS({
+				printable: URL.createObjectURL(printablePDF),
+				type: 'pdf',
+				onError: (err) => console.log(err),
+				onPrintDialogClose: () => console.log("Print dialog closed")
+			})
+
+			this.registerDomEvent(window, "afterprint", (evt: Event) => {
+				fs.unlinkSync(pdfPath)
+				console.log("FINISHED!")
+			}, {
+				once: true
+			})
+		});
 	}
 
 }
